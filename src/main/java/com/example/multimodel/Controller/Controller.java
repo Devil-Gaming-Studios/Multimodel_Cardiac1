@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 
 @RestController
+@CrossOrigin
 public class Controller {
     @Autowired
     UserService userService;
