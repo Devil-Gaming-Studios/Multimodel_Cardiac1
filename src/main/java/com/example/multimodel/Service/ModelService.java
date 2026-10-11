@@ -4,8 +4,10 @@ import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
+import com.example.multimodel.DB.ResultRepo;
 import com.example.multimodel.Entities.Report;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +17,8 @@ import java.util.Set;
 
 @Service
 public class ModelService {
+
+
 
     public record TargetOutput(double probability, boolean predictedPositive, double threshold, boolean lowConfidence) {}
 
@@ -59,6 +63,7 @@ public class ModelService {
                 }
             }
         }
+
         return out;
     }
 

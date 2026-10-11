@@ -1,10 +1,12 @@
 package com.example.multimodel.Controller;
 
 import ai.onnxruntime.OrtException;
+import com.example.multimodel.DB.ResultRepo;
 import com.example.multimodel.Entities.Report;
 import com.example.multimodel.Entities.Result;
 import com.example.multimodel.Entities.User;
 import com.example.multimodel.Records.ReportRequest;
+import com.example.multimodel.Records.ResultResponse;
 import com.example.multimodel.Service.ReportService;
 import com.example.multimodel.Service.UserService;
 import jakarta.validation.Valid;
@@ -39,24 +41,28 @@ public class Controller {
     }
 
     @PostMapping("/PDF")
-    public ResponseEntity<Result> pdf_upload(String username,@RequestParam("file") MultipartFile file)
+    public ResponseEntity<ResultResponse> pdf_upload(String username, @RequestParam("file") MultipartFile file)
     {
 
         if (file.isEmpty() || !"application/pdf".equals(file.getContentType()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"file cant be read");
 
         User user = userService.getUserByUsername(username);
-
-        return new ResponseEntity<>( reportService.GenerateResultViaPdf(user,file),HttpStatus.OK);
+        Result r = reportService.GenerateResultViaPdf(user,file);
+        return new ResponseEntity<>(new ResultResponse(
+                r.getId(), r.getCath(), r.getCath_prob(), r.getLAD(), r.getLAD_prob(),
+                r.getLCX(), r.getLCX_prob(), r.getRCA(), r.getRCA_prob()) ,HttpStatus.OK);
     }
 
     @PostMapping("/Report")
-    public ResponseEntity<Result> getResult(Authentication auth, @Valid @RequestBody ReportRequest report)
+    public ResponseEntity<ResultResponse> getResult(Authentication auth, @Valid @RequestBody ReportRequest report)
     {
         Report rep = reportService.createReport(userService.getUserByUsername(auth.getName()), report);
         try {
-            Result result = reportService.GenerateResult(rep);
-            return ResponseEntity.status(HttpStatus.CREATED).body(result);
+            Result r = reportService.GenerateResult(rep);
+            return ResponseEntity.status(HttpStatus.CREATED).body(new ResultResponse(
+                    r.getId(), r.getCath(), r.getCath_prob(), r.getLAD(), r.getLAD_prob(),
+                    r.getLCX(), r.getLCX_prob(), r.getRCA(), r.getRCA_prob()));
         } catch (OrtException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,e.toString());
         }

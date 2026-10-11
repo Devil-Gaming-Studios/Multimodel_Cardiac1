@@ -32,4 +32,10 @@ public class PdfExtractionService {
         }
         return pages;   // save each PageText as a row/chunk; ocr=true means "low confidence" warning
     }
+
+    public String toTaggedText(List<PageText> pages) {
+        return pages.stream()
+                .map(pg -> "[Page " + pg.page() + (pg.ocr() ? ", OCR" : "") + "]\n" + pg.text())
+                .collect(Collectors.joining("\n\n"));
+    }
 }

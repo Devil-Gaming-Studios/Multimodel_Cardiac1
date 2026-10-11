@@ -2,11 +2,14 @@ package com.example.multimodel.Service;
 
 import ai.onnxruntime.OrtException;
 import com.example.multimodel.DB.ReportRepo;
+import com.example.multimodel.DB.ResultRepo;
 import com.example.multimodel.Entities.Report;
 import com.example.multimodel.Records.PageText;
 import com.example.multimodel.Entities.Result;
 import com.example.multimodel.Entities.User;
 import com.example.multimodel.Records.ReportRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class ReportService {
@@ -28,19 +32,35 @@ public class ReportService {
     @Autowired
     ModelService modelService;
 
+    @Autowired
+    ResultRepo resultRepo;
 
-    public Result GenerateResultViaPdf(User user, MultipartFile file)
-    {
+    @Autowired
+    Validator validator;
+
+    @Autowired
+    ReportFieldExtractor reportFieldExtractor;
+
+    public Result GenerateResultViaPdf(User user, MultipartFile file) {
         try {
             List<PageText> pages = pdfExtractionService.extract(file.getBytes());
-            Result result = new Result();
+            String text = pdfExtractionService.toTaggedText(pages);
 
-            result.setLAD((byte) pages.get(0).page());
-            System.out.println(pages.getFirst().text());
-            return result;
-        }catch (Exception e)
-        {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,e.toString());
+            ReportRequest req = reportFieldExtractor.extract(text);   // the new piece
+
+            Set<ConstraintViolation<ReportRequest>> bad = validator.validate(req);
+            if (!bad.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Could not read these fields from the PDF: " + bad.stream()
+                                .map(v -> v.getPropertyPath() + " " + v.getMessage()).toList());
+            }
+
+            Report rep = createReport(user, req);
+            return GenerateResult(rep);
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to process PDF");
         }
     }
 
@@ -134,6 +154,9 @@ public class ReportService {
         result.setLCX_prob(out.get("LCX").probability());
         result.setRCA_prob(out.get("RCA").probability());
         result.setCath_prob(out.get("CAD").probability());
+
+        result.setReport(report);
+        resultRepo.save(result);
         return result;
     }
 }

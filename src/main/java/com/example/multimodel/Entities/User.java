@@ -1,5 +1,6 @@
 package com.example.multimodel.Entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,8 +20,10 @@ public class User {
     @Column(unique = true)
     private String username;
 
+    @JsonIgnore
     private String password;
 
-    @OneToMany
+    @JsonIgnore
+    @OneToMany(mappedBy = "user")
     List<Report> report;
 }
