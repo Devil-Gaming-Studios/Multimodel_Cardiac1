@@ -49,6 +49,7 @@ public class ReportService {
             ReportRequest req = reportFieldExtractor.extract(text);   // the new piece
 
             Set<ConstraintViolation<ReportRequest>> bad = validator.validate(req);
+            System.out.println("VALIDATION: " + bad);
             if (!bad.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "Could not read these fields from the PDF: " + bad.stream()
@@ -56,6 +57,8 @@ public class ReportService {
             }
 
             Report rep = createReport(user, req);
+
+            System.out.println("EXTRACTED: " + req);
             return GenerateResult(rep);
         } catch (ResponseStatusException e) {
             throw e;

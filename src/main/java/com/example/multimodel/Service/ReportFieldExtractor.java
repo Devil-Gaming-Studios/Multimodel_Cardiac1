@@ -18,24 +18,31 @@ public class ReportFieldExtractor {
     private static final int MAX_CHARS = 24000;
 
     private static final String SYSTEM_PROMPT = """
-        You extract structured data from a cardiology patient report. Reply with ONE JSON object only.
-        Use exactly these keys. Use null for any value that is not stated in the report; never guess.
-        Binary flags: 1 = present/yes/positive, 0 = absent/no/negative.
-        Numbers only (no units).
+    Extract data from the cardiology patient report into ONE JSON object.
+    Use EXACTLY this template: keep every key name unchanged, and replace each null with the value
+    from the report (a plain number), or leave null if the report does not state it. Never guess.
 
-        age, weight(kg), length(cm), sex(1=male,0=female), BMI(decimal),
-        DM, HTN, current_smoker, ex_smoker, FH(family history of CAD), Obesity, CRF, CVA,
-        Airway_disease, Thyroid_disease, CHF, DLP,
-        BP(systolic mmHg), PR(pulse), Edema, Weak_Peripheral_Pulse, Lung_rales,
-        Systolic_Murmur, Diastolic_Murmur, Typical_Chest_Pain, Dyspnea,
-        Function_class(0-3), Atypical, Nonanginal, Exertional_CP, LowTH_Ang,
-        Q_Wave, St_Elevation, St_Depression, Tinversion, LVH,
-        BBB(0=none, 1=LBBB, 2=RBBB),
-        FBS, CR(decimal), TG, LDL, HDL(decimal), BUN, ESR, HB(decimal), K(decimal), Na,
-        WBC(cells/uL, e.g. 7500), Lymph(%), Neut(%), PLT(x1000),
-        EF_TTE(%), Region_RWMA(0-4, number of regions with wall-motion abnormality),
-        VHD(0=none,1=mild,2=moderate,3=severe)
-        """;
+    {"age":null,"weight":null,"length":null,"sex":null,"BMI":null,"DM":null,"HTN":null,
+     "current_smoker":null,"ex_smoker":null,"FH":null,"Obesity":null,"CRF":null,"CVA":null,
+     "Airway_disease":null,"Thyroid_disease":null,"CHF":null,"DLP":null,"BP":null,"PR":null,
+     "Edema":null,"Weak_Peripheral_Pulse":null,"Lung_rales":null,"Systolic_Murmur":null,
+     "Diastolic_Murmur":null,"Typical_Chest_Pain":null,"Dyspnea":null,"Function_class":null,
+     "Atypical":null,"Nonanginal":null,"Exertional_CP":null,"LowTH_Ang":null,"Q_Wave":null,
+     "St_Elevation":null,"St_Depression":null,"Tinversion":null,"LVH":null,"BBB":null,
+     "FBS":null,"CR":null,"TG":null,"LDL":null,"HDL":null,"BUN":null,"ESR":null,"HB":null,
+     "K":null,"Na":null,"WBC":null,"Lymph":null,"Neut":null,"PLT":null,"EF_TTE":null,
+     "Region_RWMA":null,"VHD":null}
+
+    Value rules (values must be plain numbers, no units, no text):
+    - Yes/present/positive = 1, No/absent/negative = 0.
+    - sex: male = 1, female = 0.
+    - weight in kg, length (height) in cm, BP = systolic mmHg, PR = pulse per minute.
+    - BBB: none = 0, LBBB = 1, RBBB = 2.
+    - VHD: none = 0, mild = 1, moderate = 2, severe = 3.
+    - Function_class: 0 to 3. Region_RWMA: number of regions with wall-motion abnormality, 0 to 4.
+    - WBC in cells/uL (e.g. 7500), Lymph and Neut in percent, PLT in thousands (e.g. 250), EF_TTE in percent.
+    - CR, HDL, HB, K, BMI may be decimals; everything else integers.
+    """;
 
     private final RestClient client;
     private final JsonMapper mapper = JsonMapper.builder().build();

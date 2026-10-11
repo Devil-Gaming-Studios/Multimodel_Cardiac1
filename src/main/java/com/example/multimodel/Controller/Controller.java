@@ -41,13 +41,13 @@ public class Controller {
     }
 
     @PostMapping("/PDF")
-    public ResponseEntity<ResultResponse> pdf_upload(String username, @RequestParam("file") MultipartFile file)
+    public ResponseEntity<ResultResponse> pdf_upload(Authentication auth, @RequestParam("file") MultipartFile file)
     {
 
         if (file.isEmpty() || !"application/pdf".equals(file.getContentType()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"file cant be read");
 
-        User user = userService.getUserByUsername(username);
+        User user = userService.getUserByUsername(auth.getName());
         Result r = reportService.GenerateResultViaPdf(user,file);
         return new ResponseEntity<>(new ResultResponse(
                 r.getId(), r.getCath(), r.getCath_prob(), r.getLAD(), r.getLAD_prob(),
