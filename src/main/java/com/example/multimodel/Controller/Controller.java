@@ -1,13 +1,17 @@
 package com.example.multimodel.Controller;
 
+import ai.onnxruntime.OrtException;
 import com.example.multimodel.Entities.Report;
 import com.example.multimodel.Entities.Result;
 import com.example.multimodel.Entities.User;
+import com.example.multimodel.Records.ReportRequest;
 import com.example.multimodel.Service.ReportService;
 import com.example.multimodel.Service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,8 +51,15 @@ public class Controller {
     }
 
     @PostMapping("/Report")
-    public ResponseEntity<Result> pdf_upload(String username, @RequestBody Report report)
+    public ResponseEntity<Result> getResult(Authentication auth, @Valid @RequestBody ReportRequest report)
     {
+        Report rep = reportService.createReport(userService.getUserByUsername(auth.getName()), report);
+        try {
+            Result result = reportService.GenerateResult(rep);
+            return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        } catch (OrtException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,e.toString());
+        }
 
     }
 }

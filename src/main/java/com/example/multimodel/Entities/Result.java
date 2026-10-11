@@ -19,6 +19,11 @@ public class Result {
     Byte RCA;
     Byte Cath;
 
+    Double LAD_prob;
+    Double LCX_prob;
+    Double RCA_prob;
+    Double Cath_prob;
+
     @OneToOne
     @JoinColumn(name = "Report_ID")
     private Report report;
