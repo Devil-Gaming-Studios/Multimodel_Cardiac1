@@ -3,19 +3,22 @@ package com.example.multimodel.Service;
 import com.example.multimodel.Records.ReportRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class ReportFieldExtractor {
 
-    private static final String MODEL = "openai/gpt-oss-20b";
-    private static final int MAX_CHARS = 24000;
+    private static final int MAX_CHARS = 8000;   // per chunk; fits an 8192-token context with the prompt
 
     private static final String SYSTEM_PROMPT = """
     Extract data from the cardiology patient report into ONE JSON object.
@@ -45,39 +48,62 @@ public class ReportFieldExtractor {
     """;
 
     private final RestClient client;
+    private final String model;
     private final JsonMapper mapper = JsonMapper.builder().build();
 
-    public ReportFieldExtractor(@Value("${groq.api.key}") String apiKey) {
-        this.client = RestClient.builder()
-                .baseUrl("https://api.groq.com/openai/v1")
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build();
+    public ReportFieldExtractor(@Value("${ollama.url:http://localhost:11434}") String url,
+                                @Value("${ollama.model:qwen2.5:7b-instruct}") String model) {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
+        factory.setReadTimeout(Duration.ofMinutes(3));          // local models can be slow on CPU
+        this.client = RestClient.builder().baseUrl(url).requestFactory(factory).build();
+        this.model = model;
+    }
+
+    public ReportRequest extract(String reportText) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        for (String chunk : chunk(reportText)) {
+            Map<String, Object> part = callModel(chunk);
+            part.forEach((k, v) -> { if (v != null) merged.putIfAbsent(k, v); });   // first value found wins
+        }
+        return mapper.convertValue(merged, ReportRequest.class);
+    }
+
+    private List<String> chunk(String text) {
+        List<String> chunks = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (String page : text.split("(?=\\[Page \\d+)")) {
+            if (cur.length() > 0 && cur.length() + page.length() > MAX_CHARS) {
+                chunks.add(cur.toString());
+                cur.setLength(0);
+            }
+            if (page.length() > MAX_CHARS) {
+                for (int i = 0; i < page.length(); i += MAX_CHARS)
+                    chunks.add(page.substring(i, Math.min(page.length(), i + MAX_CHARS)));
+            } else {
+                cur.append(page);
+            }
+        }
+        if (cur.length() > 0) chunks.add(cur.toString());
+        return chunks;
     }
 
     @SuppressWarnings("unchecked")
-    public ReportRequest extract(String reportText) {
-        String text = reportText.length() > MAX_CHARS ? reportText.substring(0, MAX_CHARS) : reportText;
-
+    private Map<String, Object> callModel(String text) {
         Map<String, Object> body = Map.of(
-                "model", MODEL,
-                "temperature", 0,
-                "response_format", Map.of("type", "json_object"),
+                "model", model,
+                "stream", false,
+                "format", "json",
+                "options", Map.of("temperature", 0, "num_ctx", 8192),
                 "messages", List.of(
                         Map.of("role", "system", "content", SYSTEM_PROMPT),
                         Map.of("role", "user", "content", text)));
-
         try {
-            Map<String, Object> res = client.post()
-                    .uri("/chat/completions")
-                    .body(body)
-                    .retrieve()
-                    .body(Map.class);
-
-            List<Map<String, Object>> choices = (List<Map<String, Object>>) res.get("choices");
-            Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-            return mapper.readValue((String) message.get("content"), ReportRequest.class);
+            Map<String, Object> res = client.post().uri("/api/chat").body(body).retrieve().body(Map.class);
+            Map<String, Object> message = (Map<String, Object>) res.get("message");
+            return mapper.readValue((String) message.get("content"), Map.class);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Field extraction failed");
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Local model unavailable. Is Ollama running and the model pulled?");
         }
     }
 }

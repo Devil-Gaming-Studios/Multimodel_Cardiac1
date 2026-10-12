@@ -4,10 +4,8 @@ import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
-import com.example.multimodel.DB.ResultRepo;
 import com.example.multimodel.Entities.Report;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -67,7 +65,7 @@ public class ModelService {
         return out;
     }
 
-    private float[] toVector(Report r) {
+    public float[] toVector(Report r) {
         float[] v = new float[FEATURES.length];
         int i = 0;
         v[i++] = r.getAge();            v[i++] = r.getWeight();         v[i++] = r.getLength();
@@ -92,5 +90,17 @@ public class ModelService {
         v[i++] = r.getBBB() == 0 ? 1f : 0f;   // BBB_N    (0=N, 1=LBBB, 2=RBBB; LBBB is the dropped baseline)
         v[i++] = r.getBBB() == 2 ? 1f : 0f;   // BBB_RBBB
         return v;
+    }
+
+    public double[] predictBatch(String target, float[][] rows) throws OrtException {
+        OrtSession s = sessions.get(target);
+        String in = s.getInputNames().iterator().next();
+        try (OnnxTensor t = OnnxTensor.createTensor(env, rows);
+             OrtSession.Result res = s.run(Map.of(in, t))) {
+            float[][] probs = (float[][]) res.get(1).getValue();
+            double[] out = new double[probs.length];
+            for (int i = 0; i < probs.length; i++) out[i] = probs[i][1];
+            return out;
+        }
     }
 }

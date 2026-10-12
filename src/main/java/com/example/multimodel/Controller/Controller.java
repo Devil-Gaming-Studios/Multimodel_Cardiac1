@@ -7,6 +7,7 @@ import com.example.multimodel.Entities.Result;
 import com.example.multimodel.Entities.User;
 import com.example.multimodel.Records.ReportRequest;
 import com.example.multimodel.Records.ResultResponse;
+import com.example.multimodel.Service.ExplanationService;
 import com.example.multimodel.Service.ReportService;
 import com.example.multimodel.Service.UserService;
 import jakarta.validation.Valid;
@@ -27,6 +28,9 @@ public class Controller {
 
     @Autowired
     ReportService reportService;
+
+    @Autowired
+    ExplanationService explanationService;
 
     @GetMapping("/health")
     public ResponseEntity<String> health()
@@ -52,7 +56,7 @@ public class Controller {
         Result r = reportService.GenerateResultViaPdf(user,file);
         return new ResponseEntity<>(new ResultResponse(
                 r.getId(), r.getCath(), r.getCath_prob(), r.getLAD(), r.getLAD_prob(),
-                r.getLCX(), r.getLCX_prob(), r.getRCA(), r.getRCA_prob()) ,HttpStatus.OK);
+                r.getLCX(), r.getLCX_prob(), r.getRCA(), r.getRCA_prob(), explanationService.explain(r.getReport(), 10)) ,HttpStatus.OK);
     }
 
     @PostMapping("/Report")
@@ -63,7 +67,7 @@ public class Controller {
             Result r = reportService.GenerateResult(rep);
             return ResponseEntity.status(HttpStatus.CREATED).body(new ResultResponse(
                     r.getId(), r.getCath(), r.getCath_prob(), r.getLAD(), r.getLAD_prob(),
-                    r.getLCX(), r.getLCX_prob(), r.getRCA(), r.getRCA_prob()));
+                    r.getLCX(), r.getLCX_prob(), r.getRCA(), r.getRCA_prob(), explanationService.explain(r.getReport(), 10)));
         } catch (OrtException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,e.toString());
         }
