@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Map;
+
 
 @RestController
 @CrossOrigin
@@ -36,6 +38,11 @@ public class Controller {
     public ResponseEntity<String> health()
     {
         return new ResponseEntity<>("server is working", HttpStatus.OK);
+    }
+
+    @GetMapping("/me")
+    public Map<String, String> me(Authentication auth) {
+        return Map.of("username", auth.getName());
     }
 
     @PostMapping("/register")
@@ -77,5 +84,15 @@ public class Controller {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,e.toString());
         }
 
+    }
+
+    @PostMapping("/PDF/extract")
+    public ReportRequest extract(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "file is empty");
+        String name = file.getOriginalFilename();
+        if (name == null || !name.toLowerCase().endsWith(".pdf"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "only .pdf files are accepted");
+        return reportService.extractFromPdf(file);
     }
 }

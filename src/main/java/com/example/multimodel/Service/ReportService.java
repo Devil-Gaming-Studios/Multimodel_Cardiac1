@@ -163,4 +163,16 @@ public class ReportService {
         resultRepo.save(result);
         return result;
     }
+
+    public ReportRequest extractFromPdf(MultipartFile file) {
+        try {
+            List<PageText> pages = pdfExtractionService.extract(file.getBytes());
+            String text = pdfExtractionService.toTaggedText(pages);
+            return reportFieldExtractor.extract(text);   // no validation here: the UI lets the user fill gaps
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to read PDF");
+        }
+    }
 }
