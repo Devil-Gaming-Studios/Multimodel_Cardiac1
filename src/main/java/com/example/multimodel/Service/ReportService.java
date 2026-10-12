@@ -63,7 +63,8 @@ public class ReportService {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to process PDF");
+            System.out.println("PDF processing failed"+ e.toString());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to process PDF: " + e.getMessage(), e);
         }
     }
 

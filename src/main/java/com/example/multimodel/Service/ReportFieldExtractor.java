@@ -52,7 +52,7 @@ public class ReportFieldExtractor {
     private final JsonMapper mapper = JsonMapper.builder().build();
 
     public ReportFieldExtractor(@Value("${ollama.url:http://localhost:11434}") String url,
-                                @Value("${ollama.model:qwen2.5:7b-instruct}") String model) {
+                                @Value("${ollama.model:llama3.1:8b}") String model) {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
         factory.setReadTimeout(Duration.ofMinutes(3));          // local models can be slow on CPU
         this.client = RestClient.builder().baseUrl(url).requestFactory(factory).build();

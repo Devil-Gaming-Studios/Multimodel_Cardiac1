@@ -49,8 +49,13 @@ public class Controller {
     public ResponseEntity<ResultResponse> pdf_upload(Authentication auth, @RequestParam("file") MultipartFile file)
     {
 
-        if (file.isEmpty() || !"application/pdf".equals(file.getContentType()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"file cant be read");
+        if (file.isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "file is empty");
+
+        String name = file.getOriginalFilename();
+        if (name == null || !name.toLowerCase().endsWith(".pdf"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "only .pdf files are accepted (got: " + name + ", type: " + file.getContentType() + ")");
 
         User user = userService.getUserByUsername(auth.getName());
         Result r = reportService.GenerateResultViaPdf(user,file);
