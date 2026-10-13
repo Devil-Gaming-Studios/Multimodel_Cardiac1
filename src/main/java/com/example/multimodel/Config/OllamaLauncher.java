@@ -17,6 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Starts the bundled Ollama next to the app (only when -Dapp.dir is set, i.e. the packaged build),
@@ -34,6 +36,19 @@ public class OllamaLauncher {
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     private Process process;
+
+    // ---- model setup state, read by SetupController -> shown in the UI ----
+    public record Status(String state, String message, long completed, long total, int percent) {}
+    private volatile Status status = new Status("STARTING", "Starting local AI engine…", 0, 0, 0);
+    public Status status() { return status; }
+    private void set(String state, String msg, long done, long total) {
+        int pct = total > 0 ? (int) Math.min(100, done * 100 / total) : 0;
+        status = new Status(state, msg, done, total, pct);
+    }
+    private static final Pattern NUM_TOTAL = Pattern.compile("\"total\"\\s*:\\s*(\\d+)");
+    private static final Pattern NUM_DONE  = Pattern.compile("\"completed\"\\s*:\\s*(\\d+)");
+    private static final Pattern STATUS    = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]*)\"");
+    private static final Pattern ERROR     = Pattern.compile("\"error\"\\s*:\\s*\"([^\"]*)\"");
 
     private boolean up() {
         try {
@@ -75,15 +90,59 @@ public class OllamaLauncher {
 
     @EventListener(ApplicationReadyEvent.class)
     public void onReady() {
+        boolean packaged = appDir != null && !appDir.isBlank();
+        if (!packaged) { set("READY", "", 0, 0); return; }
         Thread t = new Thread(() -> {
-            if (appDir != null && !appDir.isBlank()) {
-                for (int i = 0; i < 120 && !up(); i++) sleep(500);
-                if (up()) preload();
+            if (openBrowser) openBrowser();                       // open early so the user sees the download progress
+            for (int i = 0; i < 120 && !up(); i++) sleep(500);
+            if (!up()) { set("ERROR", "The local AI engine could not start. See ~/.multimodel/ollama.log", 0, 0); return; }
+            if (!hasModel()) pull();
+            if (!"ERROR".equals(status.state())) {
+                set("LOADING", "Loading the AI model into memory…", 0, 0);
+                preload();
+                set("READY", "", 0, 0);
             }
-            if (openBrowser && appDir != null && !appDir.isBlank()) openBrowser();
         }, "ollama-warmup");
         t.setDaemon(true);
         t.start();
+    }
+
+    private boolean hasModel() {
+        try {
+            var r = http.send(HttpRequest.newBuilder(URI.create(ollamaUrl + "/api/tags"))
+                    .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
+            return r.body().contains("\"" + model + "\"");
+        } catch (Exception e) { return false; }
+    }
+
+    /** First launch only: downloads the model through Ollama (needs internet once). */
+    private void pull() {
+        set("DOWNLOADING", "First launch: downloading the AI model (one time, needs internet)…", 0, 0);
+        String body = "{\"model\":\"" + model + "\",\"stream\":true}";
+        try {
+            var res = http.send(HttpRequest.newBuilder(URI.create(ollamaUrl + "/api/pull"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofLines());
+            if (res.statusCode() != 200) { set("ERROR", "Model download failed (HTTP " + res.statusCode() + ").", 0, 0); return; }
+            boolean ok = false;
+            try (var lines = res.body()) {
+                for (var it = lines.iterator(); it.hasNext(); ) {
+                    String line = it.next();
+                    Matcher e = ERROR.matcher(line);
+                    if (e.find()) { set("ERROR", "Model download failed: " + e.group(1) + " (check your internet connection and reopen the app)", 0, 0); return; }
+                    Matcher st = STATUS.matcher(line), tt = NUM_TOTAL.matcher(line), dd = NUM_DONE.matcher(line);
+                    String s = st.find() ? st.group(1) : "";
+                    if (s.equals("success")) ok = true;
+                    long total = tt.find() ? Long.parseLong(tt.group(1)) : 0;
+                    long done = dd.find() ? Long.parseLong(dd.group(1)) : 0;
+                    if (total > 0) set("DOWNLOADING", "Downloading the AI model… " + (done / 1_000_000) + " / " + (total / 1_000_000) + " MB", done, total);
+                    else if (!s.isEmpty()) set("DOWNLOADING", "Preparing model: " + s, 0, 0);
+                }
+            }
+            if (!ok && !hasModel()) set("ERROR", "Model download was interrupted. Reopen the app with internet to resume.", 0, 0);
+        } catch (Exception ex) {
+            set("ERROR", "No internet? The model could not be downloaded. Connect once and reopen the app.", 0, 0);
+        }
     }
 
     private void preload() {

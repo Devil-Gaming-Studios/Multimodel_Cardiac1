@@ -16,7 +16,7 @@ import java.util.List;
 public class OCR_Tool {
     public List<PageText> ocr_tool(byte[] pdfBytes, List<Integer> pageNumbers) throws IOException, TesseractException {
         Tesseract tesseract = new Tesseract();          // created once, not per page
-        tesseract.setDatapath(".\\tessdata");
+        tesseract.setDatapath(System.getProperty("app.dir", ".") + "\\tessdata");
         tesseract.setLanguage("eng");
 
         List<PageText> out = new ArrayList<>();

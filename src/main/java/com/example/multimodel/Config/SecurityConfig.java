@@ -28,7 +28,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(request -> request
                         // public: the UI files and the two open endpoints
                         .requestMatchers("/", "/index.html", "/assets/**", "/models/**",
-                                "/favicon.ico", "/health", "/login", "/register", "/error").permitAll()
+                                "/favicon.ico", "/health", "/login", "/register", "/error","/setup/status").permitAll()
                         .anyRequest().authenticated());
 
         http.formLogin(c -> c.disable());
