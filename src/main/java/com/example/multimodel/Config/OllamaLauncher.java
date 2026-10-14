@@ -33,8 +33,9 @@ public class OllamaLauncher {
     @Value("${ollama.model:llama3.1:8b}")          private String model;
     @Value("${server.port:8080}")    private int serverPort;
     @Value("${app.open-browser:true}") private boolean openBrowser;
+    @Value("${app.window:true}")       private boolean appWindow;
 
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(2)).build();
     private Process process;
 
     // ---- model setup state, read by SetupController -> shown in the UI ----
@@ -49,6 +50,15 @@ public class OllamaLauncher {
     private static final Pattern NUM_DONE  = Pattern.compile("\"completed\"\\s*:\\s*(\\d+)");
     private static final Pattern STATUS    = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]*)\"");
     private static final Pattern ERROR     = Pattern.compile("\"error\"\\s*:\\s*\"([^\"]*)\"");
+
+    private void log(String m) {
+        try {
+            Path d = Path.of(System.getProperty("user.home"), ".multimodel");
+            Files.createDirectories(d);
+            Files.writeString(d.resolve("launcher.log"), java.time.LocalTime.now() + " " + m + System.lineSeparator(),
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+        } catch (Exception ignored) { }
+    }
 
     private boolean up() {
         try {
@@ -91,12 +101,18 @@ public class OllamaLauncher {
     @EventListener(ApplicationReadyEvent.class)
     public void onReady() {
         boolean packaged = appDir != null && !appDir.isBlank();
+        log("onReady packaged=" + packaged + " appDir='" + appDir + "'");
         if (!packaged) { set("READY", "", 0, 0); return; }
         Thread t = new Thread(() -> {
-            if (openBrowser) openBrowser();                       // open early so the user sees the download progress
+            if (openBrowser) {                                    // own thread: openBrowser() blocks until the window is closed
+                Thread w = new Thread(this::openBrowser, "app-window");
+                w.setDaemon(true);
+                w.start();
+            }
             for (int i = 0; i < 120 && !up(); i++) sleep(500);
             if (!up()) { set("ERROR", "The local AI engine could not start. See ~/.multimodel/ollama.log", 0, 0); return; }
-            if (!hasModel()) pull();
+            log("ollama up at " + ollamaUrl + ", appDir=" + appDir);
+            if (!hasModel()) { log("model missing -> pulling"); pull(); }
             if (!"ERROR".equals(status.state())) {
                 set("LOADING", "Loading the AI model into memory…", 0, 0);
                 preload();
@@ -109,10 +125,12 @@ public class OllamaLauncher {
 
     private boolean hasModel() {
         try {
-            var r = http.send(HttpRequest.newBuilder(URI.create(ollamaUrl + "/api/tags"))
-                    .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
-            return r.body().contains("\"" + model + "\"");
-        } catch (Exception e) { return false; }
+            var r = http.send(HttpRequest.newBuilder(URI.create(ollamaUrl + "/api/show"))
+                    .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"model\":\"" + model + "\"}")).build(), HttpResponse.BodyHandlers.ofString());
+            log("hasModel(" + model + ") -> HTTP " + r.statusCode());
+            return r.statusCode() == 200;
+        } catch (Exception e) { log("hasModel error: " + e); return false; }
     }
 
     /** First launch only: downloads the model through Ollama (needs internet once). */
@@ -141,6 +159,7 @@ public class OllamaLauncher {
             }
             if (!ok && !hasModel()) set("ERROR", "Model download was interrupted. Reopen the app with internet to resume.", 0, 0);
         } catch (Exception ex) {
+            log("pull error: " + ex);
             set("ERROR", "No internet? The model could not be downloaded. Connect once and reopen the app.", 0, 0);
         }
     }
@@ -155,14 +174,45 @@ public class OllamaLauncher {
         } catch (Exception ignored) { }
     }
 
+    /** Opens the UI in its own app-style window (Edge/Chrome --app mode: no tabs, no address bar).
+     *  Closing that window quits CardioScope (and the bundled Ollama). Falls back to the default browser. */
     private void openBrowser() {
+        String url = "http://localhost:" + serverPort;
         try {
-            String url = "http://localhost:" + serverPort;
+            if (appWindow) {
+                String exe = findAppBrowser();
+                if (exe != null) {
+                    Path profile = Path.of(System.getProperty("user.home"), ".multimodel", "window");
+                    Files.createDirectories(profile);
+                    Process w = new ProcessBuilder(exe, "--app=" + url, "--user-data-dir=" + profile,
+                            "--window-size=1360,900", "--no-first-run", "--no-default-browser-check")
+                            .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+                    log("opened app window with " + exe);
+                    long t0 = System.currentTimeMillis();
+                    w.waitFor();                                      // blocks until the window is closed
+                    if (System.currentTimeMillis() - t0 > 5000) { log("window closed -> exiting"); System.exit(0); }
+                    return;
+                }
+            }
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
                 Desktop.getDesktop().browse(URI.create(url));
             else if (System.getProperty("os.name").toLowerCase().contains("win"))
                 new ProcessBuilder("cmd", "/c", "start", url).start();
-        } catch (Exception ignored) { }
+        } catch (InterruptedException ie) { Thread.currentThread().interrupt();
+        } catch (Exception e) { log("openBrowser error: " + e); }
+    }
+
+    private static String findAppBrowser() {
+        String[] candidates = {
+                System.getenv("ProgramFiles(x86)") + "\\Microsoft\\Edge\\Application\\msedge.exe",
+                System.getenv("ProgramFiles") + "\\Microsoft\\Edge\\Application\\msedge.exe",
+                System.getenv("ProgramFiles") + "\\Google\\Chrome\\Application\\chrome.exe",
+                System.getenv("ProgramFiles(x86)") + "\\Google\\Chrome\\Application\\chrome.exe",
+                System.getenv("LOCALAPPDATA") + "\\Google\\Chrome\\Application\\chrome.exe",
+                "/usr/bin/microsoft-edge", "/usr/bin/google-chrome", "/usr/bin/chromium"
+        };
+        for (String c : candidates) if (c != null && !c.startsWith("null") && Files.isRegularFile(Path.of(c))) return c;
+        return null;
     }
 
     private static void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } }

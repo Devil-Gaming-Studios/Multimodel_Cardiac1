@@ -3,16 +3,16 @@ setlocal
 REM ===== Run from the project root (where gradlew.bat is). =====
 REM Prereqs: JDK 21 (JAVA_HOME), Ollama zip extracted in bundle\ollama, models pulled into bundle\ollama-models,
 REM          tessdata\eng.traineddata in bundle\tessdata, frontend built into src\main\resources\static.
-set APP=CardioScope
+set APP=CardioScopeV2
 set BUNDLE=bundle
-set OUT=out
+set OUT=D:\multi_model_offline\dist
 
 if not exist %BUNDLE%\ollama\ollama.exe ( echo Missing %BUNDLE%\ollama\ollama.exe & exit /b 1 )
 
 call gradlew.bat clean bootJar || exit /b 1
 if exist %OUT% rmdir /s /q %OUT%
 mkdir %OUT%\stage
-copy build\libs\*.jar %OUT%\stage\app.jar >nul
+for %%f in (build\libs\*.jar) do echo %%f | find "-plain" >nul || copy /y "%%f" %OUT%\stage\app.jar >nul
 del /q %OUT%\stage\*-plain.jar 2>nul
 
 jpackage --type app-image --name %APP% --dest %OUT% --input %OUT%\stage ^
