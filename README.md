@@ -6,7 +6,7 @@ An offline cardiology report assistant. Upload a cardiology report PDF, and the 
 
 ## Download
 
-[![Download the offline app](https://img.shields.io/badge/Download-Offline_App-2ea44f?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1U9qJdiwolxpVdYi2VhvHLHxJEXY3A-M6/view?usp=sharing)
+[![Download the offline app](https://img.shields.io/badge/Download-Offline_App-2ea44f?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1681XDnAmK3OIvJ29iiYL2fz56iTOm_rO/view?usp=drive_link)
 
 The download runs entirely on your machine. You still need [Ollama](https://ollama.com) installed with the `llama3.1:8b` model pulled (see [Getting started](#getting-started)).
 
